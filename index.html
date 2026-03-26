@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claudezak</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Source+Serif+4:ital,wght@0,400;1,400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #111;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      font-family: 'Oswald', sans-serif;
+    }
+
+    #cz-wrap {
+      background: #1a1a1a;
+      border-radius: 12px;
+      overflow: hidden;
+      width: 100%;
+      max-width: 640px;
+      border: 1px solid #333;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    }
+
+    #cz-header {
+      background: #111;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #2a2a2a;
+    }
+
+    #cz-avatar {
+      width: 44px; height: 44px;
+      background: #c0392b;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: #fff;
+      flex-shrink: 0; position: relative;
+    }
+
+    #cz-avatar::after {
+      content: '';
+      position: absolute; bottom: 1px; right: 1px;
+      width: 10px; height: 10px;
+      background: #27ae60; border-radius: 50%;
+      border: 2px solid #111;
+    }
+
+    #cz-name { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 1px; }
+    #cz-tagline { font-size: 12px; color: #888; font-family: 'Source Serif 4', serif; font-style: italic; margin-top: 2px; }
+    #cz-counter { margin-left: auto; font-size: 12px; color: #666; font-family: 'Source Serif 4', serif; font-style: italic; white-space: nowrap; }
+
+    #cz-messages {
+      height: 420px;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
+      background: #1a1a1a;
+      scrollbar-width: thin; scrollbar-color: #333 transparent;
+    }
+
+    .msg { display: flex; gap: 10px; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .msg.user { flex-direction: row-reverse; }
+
+    .bubble {
+      max-width: 78%; padding: 10px 14px;
+      border-radius: 4px; font-size: 15px; line-height: 1.6;
+    }
+
+    .msg.bot .bubble {
+      background: #222; color: #e0e0e0;
+      border-left: 3px solid #c0392b;
+      font-family: 'Source Serif 4', serif;
+    }
+
+    .msg.user .bubble {
+      background: #2c2c2c; color: #ccc;
+      border-right: 3px solid #555; text-align: right;
+      font-family: 'Source Serif 4', serif;
+    }
+
+    .msg-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #c0392b;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .msg.user .msg-avatar { background: #444; color: #aaa; }
+
+    #cz-typing { display: none; align-items: center; gap: 10px; padding: 0 0 4px; }
+    #cz-typing .bubble { display: flex; gap: 5px; align-items: center; padding: 12px 14px; }
+
+    .dot {
+      width: 6px; height: 6px;
+      background: #c0392b; border-radius: 50%;
+      animation: bounce 1s infinite;
+    }
+    .dot:nth-child(2) { animation-delay: 0.15s; }
+    .dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-5px); } }
+
+    #cz-input-area {
+      border-top: 1px solid #2a2a2a;
+      padding: 14px 16px;
+      display: flex; gap: 10px; align-items: flex-end;
+      background: #111;
+    }
+
+    #cz-input {
+      flex: 1; background: #222; border: 1px solid #333; border-radius: 4px;
+      color: #ddd; font-family: 'Source Serif 4', serif; font-size: 15px;
+      padding: 10px 12px; resize: none;
+      min-height: 42px; max-height: 120px;
+      outline: none; line-height: 1.5;
+    }
+    #cz-input:focus { border-color: #555; }
+    #cz-input::placeholder { color: #555; }
+    #cz-input:disabled { background: #1a1a1a; color: #444; cursor: not-allowed; border-color: #222; }
+
+    #cz-send {
+      background: #c0392b; border: none; border-radius: 4px;
+      color: #fff; font-family: 'Oswald', sans-serif;
+      font-weight: 700; font-size: 13px; letter-spacing: 1px;
+      padding: 10px 16px; cursor: pointer; height: 42px;
+      flex-shrink: 0; transition: background 0.15s;
+    }
+    #cz-send:hover { background: #e74c3c; }
+    #cz-send:active { background: #a93226; }
+    #cz-send:disabled { background: #333; color: #555; cursor: not-allowed; }
+
+    #cz-blocked {
+      display: none; text-align: center;
+      padding: 16px; background: #111;
+      border-top: 1px solid #2a2a2a;
+      font-family: 'Source Serif 4', serif; font-style: italic;
+      font-size: 14px; color: #c0392b;
+    }
+
+    #cz-disclaimer {
+      text-align: center; font-size: 11px; color: #444;
+      padding: 8px; font-family: 'Source Serif 4', serif;
+      font-style: italic; background: #111;
+      border-top: 1px solid #1e1e1e;
+    }
+
+    @media (max-width: 480px) {
+      body { padding: 0; align-items: flex-start; }
+      #cz-wrap { border-radius: 0; min-height: 100vh; }
+      #cz-messages { height: calc(100vh - 220px); }
+    }
+  </style>
+</head>
+<body>
+<div id="cz-wrap">
+  <div id="cz-header">
+    <div id="cz-avatar">CZ</div>
+    <div>
+      <div id="cz-name">CLAUDEZAK</div>
+      <div id="cz-tagline">brutally honest. always right. zero patience.</div>
+    </div>
+    <div id="cz-counter">10 vragen over</div>
+  </div>
+
+  <div id="cz-messages">
+    <div class="msg bot">
+      <div class="msg-avatar">CZ</div>
+      <div class="bubble">Nou, wat wil je weten? En maak het interessant, want ik heb geen zin in flauwekul. / So, what do you want? Make it worth my time.</div>
+    </div>
+  </div>
+
+  <div id="cz-typing" class="msg bot">
+    <div class="msg-avatar">CZ</div>
+    <div class="bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+
+  <div id="cz-input-area">
+    <textarea id="cz-input" placeholder="Vraag maar raak... / Ask away..." rows="1"></textarea>
+    <button id="cz-send">STUUR</button>
+  </div>
+  <div id="cz-blocked"></div>
+  <div id="cz-disclaimer">Claudezak zegt wat ie denkt. Gevoelige zielen: wegwezen.</div>
+</div>
+
+<script>
+  const messagesEl = document.getElementById('cz-messages');
+  const input = document.getElementById('cz-input');
+  const sendBtn = document.getElementById('cz-send');
+  const typingEl = document.getElementById('cz-typing');
+  const counterEl = document.getElementById('cz-counter');
+  const inputArea = document.getElementById('cz-input-area');
+  const blockedEl = document.getElementById('cz-blocked');
+
+  const MAX = 10;
+  let count = 0;
+  const history = [];
+
+  const LIMIT_MSGS = [
+    "Dat was je laatste vraag. Ik ben op. Ga ergens anders je problemen dumpen.",
+    "Klaar. Genoeg. Ik heb mijn burgerplicht vervuld. Vertrek nu.",
+    "Je limiet is bereikt. Ik ook. Tot nooit.",
+    "En dat was hem dan. Ik ga wat nuttigs doen. Jij ook, hopelijk.",
+    "That's your last question. I'm done. Go bother someone else.",
+    "Limit reached. So is my patience. Goodbye forever.",
+  ];
+
+  function updateCounter() {
+    const left = MAX - count;
+    if (left > 1) counterEl.textContent = left + ' vragen over';
+    else if (left === 1) counterEl.textContent = '1 vraag over — maak er wat van';
+    else { counterEl.textContent = 'opgesodemieterd'; counterEl.style.color = '#c0392b'; }
+  }
+
+  function lockDown() {
+    inputArea.style.display = 'none';
+    blockedEl.style.display = 'block';
+    blockedEl.textContent = LIMIT_MSGS[Math.floor(Math.random() * LIMIT_MSGS.length)];
+  }
+
+  function addMsg(type, text) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + type;
+    div.innerHTML = `<div class="msg-avatar">${type === 'bot' ? 'CZ' : 'JIJ'}</div><div class="bubble">${text}</div>`;
+    messagesEl.insertBefore(div, typingEl);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text || count >= MAX) return;
+
+    count++;
+    updateCounter();
+    addMsg('user', text);
+    history.push({ role: 'user', content: text });
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+    typingEl.style.display = 'flex';
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    const isLast = count >= MAX;
+
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history, isLast }),
+      });
+
+      const data = await res.json();
+      const reply = data.reply || '*zucht* Er ging iets mis. Typisch.';
+      history.push({ role: 'assistant', content: reply });
+      typingEl.style.display = 'none';
+      addMsg('bot', reply);
+    } catch (e) {
+      typingEl.style.display = 'none';
+      addMsg('bot', '*zucht* Server kapot. Iedereen laat me in de steek.');
+    }
+
+    if (isLast) {
+      setTimeout(lockDown, 800);
+    } else {
+      sendBtn.disabled = false;
+    }
+
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  });
+</script>
+</body>
+</html>
