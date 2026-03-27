@@ -54,8 +54,88 @@ const MAX_SERVER_WAIT_MS = 30000;
 const MAX_BACKOFF_MS = 30000;
 const REQUEST_MAX_TOKENS = Number(process.env.ANTHROPIC_MAX_TOKENS || 500);
 
+const MAX_BODY_CHARS = 40_000;
+const MAX_MESSAGES = 24;
+const MAX_CONTENT_CHARS = 2_000;
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 20;
+const _rate = globalThis.__cz_rate || (globalThis.__cz_rate = new Map());
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getClientIp(req) {
+  const xff = req.headers.get('x-forwarded-for');
+  if (xff) return xff.split(',')[0].trim();
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp.trim();
+  return 'unknown';
+}
+
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  let url;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+
+  const allow = new Set();
+  const envList = process.env.ALLOWED_ORIGINS || '';
+  for (const item of envList.split(',').map((s) => s.trim()).filter(Boolean)) {
+    allow.add(item);
+  }
+  if (process.env.VERCEL_URL) allow.add(`https://${process.env.VERCEL_URL}`);
+  if (process.env.SITE_ORIGIN) allow.add(process.env.SITE_ORIGIN);
+
+  return allow.has(url.origin);
+}
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '600',
+    Vary: 'Origin',
+  };
+}
+
+function rateLimit(ip) {
+  const now = Date.now();
+  const key = `${ip}`;
+  const entry = _rate.get(key);
+  if (!entry || now - entry.start > RATE_LIMIT_WINDOW_MS) {
+    _rate.set(key, { start: now, count: 1 });
+    return { ok: true, remaining: RATE_LIMIT_MAX - 1, resetMs: RATE_LIMIT_WINDOW_MS };
+  }
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return { ok: false, remaining: 0, resetMs: RATE_LIMIT_WINDOW_MS - (now - entry.start) };
+  }
+  entry.count += 1;
+  return { ok: true, remaining: RATE_LIMIT_MAX - entry.count, resetMs: RATE_LIMIT_WINDOW_MS - (now - entry.start) };
+}
+
+function sanitizeMessages(messages) {
+  if (!Array.isArray(messages)) return null;
+  if (messages.length < 1 || messages.length > MAX_MESSAGES) return null;
+
+  const clean = [];
+  for (const m of messages) {
+    if (!m || typeof m !== 'object') return null;
+    const role = m.role;
+    const content = m.content;
+    if (role !== 'user' && role !== 'assistant') return null;
+    if (typeof content !== 'string') return null;
+    const trimmed = content.trim();
+    if (!trimmed) return null;
+    if (trimmed.length > MAX_CONTENT_CHARS) return null;
+    clean.push({ role, content: trimmed });
+  }
+  return clean;
 }
 
 function getBackoffDelay(attempt) {
@@ -194,16 +274,42 @@ async function callAnthropic({ systemPrompt, messages }) {
 }
 
 export default async function handler(req) {
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+  const origin = req.headers.get('origin') || '';
+  const allowed = isAllowedOrigin(origin);
+  if (req.method === 'OPTIONS') {
+    if (!allowed) return new Response('Forbidden', { status: 403 });
+    return new Response(null, { status: 204, headers: corsHeaders(origin) });
   }
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+  if (!allowed) return new Response('Forbidden', { status: 403 });
 
   try {
-    const { messages, isLast, tone } = await req.json();
-
-    if (!messages || !Array.isArray(messages)) {
-      return new Response('Invalid request', { status: 400 });
+    const ip = getClientIp(req);
+    const rl = rateLimit(ip);
+    if (!rl.ok) {
+      return new Response(JSON.stringify({ reply: 'Rustig aan. Rate limit.' }), {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders(origin),
+          'Retry-After': String(Math.ceil(rl.resetMs / 1000)),
+        },
+      });
     }
+
+    const raw = await req.text();
+    if (raw.length > MAX_BODY_CHARS) {
+      return new Response(JSON.stringify({ reply: 'Te groot verzoek. Doe normaal.' }), {
+        status: 413,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    const parsed = JSON.parse(raw);
+    const { messages, isLast, tone } = parsed || {};
+
+    const cleanMessages = sanitizeMessages(messages);
+    if (!cleanMessages) return new Response('Invalid request', { status: 400, headers: corsHeaders(origin) });
 
     const selectedTone = typeof tone === 'string' ? tone.toLowerCase() : 'hard';
     let systemPrompt = SYSTEM_BY_TONE[selectedTone] || SYSTEM_HARD;
@@ -211,7 +317,7 @@ export default async function handler(req) {
       systemPrompt += `\n\nIMPORTANT: This is the user's LAST allowed question. After answering, make it very clear — in your typical rude, dismissive way — that you're done with them, this was their last question, and they should leave. Be dramatic about it. Keep the response in Dutch.`;
     }
 
-    const anthropic = await callAnthropic({ systemPrompt, messages });
+    const anthropic = await callAnthropic({ systemPrompt, messages: cleanMessages });
     if (!anthropic.ok) {
       const { status, bodyText, model } = anthropic.failure;
       let unfriendly = `Request gefaald op model "${model}". Los het zelf op.`;
@@ -234,7 +340,7 @@ export default async function handler(req) {
 
       return new Response(JSON.stringify({ reply: unfriendly }), {
         status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
       });
     }
 
@@ -245,13 +351,13 @@ export default async function handler(req) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        ...corsHeaders(origin),
       },
     });
   } catch (e) {
     return new Response(JSON.stringify({ reply: '*zucht* Server kapot. Iedereen laat me in de steek.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(req.headers.get('origin') || '') },
     });
   }
 }

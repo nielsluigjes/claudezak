@@ -216,7 +216,10 @@
   function addMsg(type, text) {
     const div = document.createElement('div');
     div.className = 'msg ' + type;
-    div.innerHTML = `<div class="bubble">${text}</div>`;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = String(text ?? '');
+    div.appendChild(bubble);
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
