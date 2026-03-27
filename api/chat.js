@@ -49,14 +49,18 @@ const PRIMARY_MODEL = 'claude-sonnet-4-20250514';
 const FALLBACK_MODEL = process.env.ANTHROPIC_FALLBACK_MODEL || '';
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504, 529]);
 const MAX_RETRIES = 3;
+const MAX_OVERLOAD_RETRIES = 6;
+const MAX_SERVER_WAIT_MS = 30000;
+const MAX_BACKOFF_MS = 30000;
+const REQUEST_MAX_TOKENS = Number(process.env.ANTHROPIC_MAX_TOKENS || 500);
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getBackoffDelay(attempt) {
-  const base = 1000 * 2 ** attempt;
-  const jitter = Math.floor(Math.random() * 300);
+  const base = Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS);
+  const jitter = Math.floor(Math.random() * 600);
   return base + jitter;
 }
 
@@ -64,6 +68,27 @@ function isRetryableError(status, bodyText) {
   if (RETRYABLE_STATUS_CODES.has(status)) return true;
   const lower = typeof bodyText === 'string' ? bodyText.toLowerCase() : '';
   return lower.includes('overloaded') || lower.includes('rate limit');
+}
+
+function isOverloadedError(status, bodyText) {
+  const lower = typeof bodyText === 'string' ? bodyText.toLowerCase() : '';
+  return status === 529 || lower.includes('overloaded');
+}
+
+function parseRetryAfterMs(retryAfterValue) {
+  if (!retryAfterValue) return null;
+  const asSeconds = Number(retryAfterValue);
+  if (Number.isFinite(asSeconds)) {
+    return Math.max(0, Math.min(asSeconds * 1000, MAX_SERVER_WAIT_MS));
+  }
+
+  const asDate = Date.parse(retryAfterValue);
+  if (Number.isFinite(asDate)) {
+    const delta = asDate - Date.now();
+    return Math.max(0, Math.min(delta, MAX_SERVER_WAIT_MS));
+  }
+
+  return null;
 }
 
 async function callAnthropic({ systemPrompt, messages }) {
@@ -89,7 +114,7 @@ async function callAnthropic({ systemPrompt, messages }) {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 1000,
+          max_tokens: REQUEST_MAX_TOKENS,
           system: systemPrompt,
           messages,
         }),
@@ -107,12 +132,61 @@ async function callAnthropic({ systemPrompt, messages }) {
         model,
       };
 
+      if (
+        model === PRIMARY_MODEL &&
+        FALLBACK_MODEL &&
+        FALLBACK_MODEL !== PRIMARY_MODEL &&
+        isOverloadedError(response.status, bodyText)
+      ) {
+        // Switch model immediately on overload instead of exhausting retries.
+        break;
+      }
+
       const retryable = isRetryableError(response.status, bodyText);
       if (!retryable || attempt === MAX_RETRIES) {
         break;
       }
 
-      await sleep(getBackoffDelay(attempt));
+      const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+      await sleep(retryAfterMs ?? getBackoffDelay(attempt));
+    }
+
+    // If we got here and the last failure was overload on this model, do a longer overload-specific retry loop.
+    if (lastFailure.model === model && isOverloadedError(lastFailure.status, lastFailure.bodyText)) {
+      for (let attempt = 0; attempt < MAX_OVERLOAD_RETRIES; attempt += 1) {
+        await sleep(getBackoffDelay(Math.min(attempt + 2, 6)));
+
+        const response = await fetch(ANTHROPIC_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: REQUEST_MAX_TOKENS,
+            system: systemPrompt,
+            messages,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          return { ok: true, data };
+        }
+
+        const bodyText = await response.text();
+        lastFailure = {
+          status: response.status,
+          bodyText,
+          model,
+        };
+
+        if (!isRetryableError(response.status, bodyText)) {
+          break;
+        }
+      }
     }
   }
 
@@ -148,7 +222,7 @@ export default async function handler(req) {
         if (typeof msg === 'string' && msg.toLowerCase().includes('invalid x-api-key')) {
           unfriendly = 'API-key ongeldig. Heb je dit nou serieus zo gelaten?';
         } else if (typeof msg === 'string' && msg.toLowerCase().includes('overloaded')) {
-          unfriendly = `Anthropic overloaded. Wacht of fix je infrastructuur. Laat me met rust.`;
+          unfriendly = `Anthropic overloaded op "${model}". Wacht of fix je infrastructuur. Laat me met rust.`;
         } else if (typeof msg === 'string' && msg.trim()) {
           unfriendly = `Anthropic error: ${msg}. Zoek het uit.`;
         }
