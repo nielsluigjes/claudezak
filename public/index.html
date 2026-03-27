@@ -50,7 +50,7 @@
       white-space: nowrap;
     }
     #cz-tagline { width: 100%; font-size: clamp(17px, 1.9vw, 28px); color: #888; margin-top: 10px; letter-spacing: 1px; line-height: 1.05; white-space: nowrap; }
-    #cz-counter { margin-top: 12px; font-size: clamp(12px, 1.2vw, 18px); color: #666; white-space: nowrap; letter-spacing: 1px; }
+    #cz-counter { margin-top: 12px; font-size: clamp(12px, 1.2vw, 18px); color: #666; white-space: nowrap; letter-spacing: 1px; text-transform: none; }
 
     #cz-messages {
       flex: 1;
@@ -69,16 +69,19 @@
     .bubble {
       max-width: 85%; padding: 14px 18px;
       border-radius: 4px; font-size: clamp(20px, 2.3vw, 38px); line-height: 1.15; letter-spacing: 0.6px;
+      text-transform: none;
     }
 
     .msg.bot .bubble {
       background: #222; color: #e0e0e0;
       border-left: 3px solid #fff;
+      text-transform: uppercase;
     }
 
     .msg.user .bubble {
       background: #2c2c2c; color: #ccc;
       border-right: 3px solid #555; text-align: right;
+      text-transform: none;
     }
 
     #cz-typing { display: none; align-items: center; gap: 0; padding: 0 0 4px; }
@@ -106,10 +109,10 @@
       padding: 14px 16px; resize: none;
       min-height: 60px; max-height: 220px;
       outline: none; line-height: 1.2;
-      text-transform: uppercase;
+      text-transform: none;
     }
     #cz-input:focus { border-color: #555; }
-    #cz-input::placeholder { color: #555; }
+    #cz-input::placeholder { color: #555; text-transform: uppercase; }
     #cz-input:disabled { background: #1a1a1a; color: #444; cursor: not-allowed; border-color: #222; }
 
     #cz-send {
@@ -137,6 +140,7 @@
       background: #111;
       border-top: 1px solid #1e1e1e;
       letter-spacing: 0.8px;
+      text-transform: none;
     }
 
     @media (max-width: 480px) {
@@ -151,7 +155,7 @@
     <div id="cz-brand">
       <div id="cz-name">CLAUDEZAK</div>
       <div id="cz-tagline">Een kolerelaaier van een AI</div>
-      <div id="cz-counter">10 vragen mag je 'm stellen, meer niet. Het is voor je eigen bescherming.</div>
+      <div id="cz-counter">10 vragen mag je 'm stellen, meer niet. Voor je eigen bescherming.</div>
     </div>
   </div>
 
@@ -170,7 +174,7 @@
     <button id="cz-send">STUUR</button>
   </div>
   <div id="cz-blocked"></div>
-  <div id="cz-disclaimer">Claudezak zegt wat ie denkt. Gevoelige types opzouten.</div>
+  <div id="cz-disclaimer">Claudezak zegt wat ie denkt. Niet voor gevoelige types.</div>
 </div>
 
 <script>
