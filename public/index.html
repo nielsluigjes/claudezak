@@ -200,6 +200,13 @@
     "Ja doei. Opzoute nou.",
   ];
 
+  async function ensureSession() {
+    // Get an HttpOnly signed session cookie from the server.
+    try {
+      await fetch('/api/session', { method: 'GET' });
+    } catch {}
+  }
+
   function updateCounter() {
     const left = MAX - count;
     if (left > 1) counterEl.textContent = left + ' vragen over';
@@ -228,6 +235,8 @@
     const text = input.value.trim();
     if (!text || count >= MAX) return;
 
+    await ensureSession();
+
     count++;
     updateCounter();
     addMsg('user', text);
@@ -247,8 +256,13 @@
         body: JSON.stringify({ messages: history, isLast }),
       });
 
-      const data = await res.json();
-      const reply = data.reply || '*zucht* Er ging iets mis. Typisch.';
+      let data = null;
+      try { data = await res.json(); } catch {}
+      const reply =
+        (res.ok && data && data.reply) ? data.reply :
+        (!res.ok && data && (data.reply || data.error)) ? (data.reply || data.error) :
+        (!res.ok) ? ('Server zei: ' + res.status) :
+        '*zucht* Er ging iets mis. Typisch.';
       history.push({ role: 'assistant', content: reply });
       typingEl.style.display = 'none';
       addMsg('bot', reply);

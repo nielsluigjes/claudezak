@@ -2,7 +2,8 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import handler from './api/chat.js';
+import chatHandler from './api/chat.js';
+import sessionHandler from './api/session.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,7 +48,7 @@ const mime = {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host}`);
 
-  if (url.pathname === '/api/chat' && req.method === 'POST') {
+  if (url.pathname.startsWith('/api/')) {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks);
@@ -58,11 +59,12 @@ const server = http.createServer(async (req, res) => {
       else headers.set(k, v);
     }
     const request = new Request(`http://localhost${url.pathname}`, {
-      method: 'POST',
+      method: req.method || 'GET',
       headers,
       body: body.length ? body : undefined,
     });
     try {
+      const handler = url.pathname === '/api/session' ? sessionHandler : chatHandler;
       const response = await handler(request);
       const buf = Buffer.from(await response.arrayBuffer());
       response.headers.forEach((v, k) => res.setHeader(k, v));

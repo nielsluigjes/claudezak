@@ -1,4 +1,5 @@
 export const config = { runtime: 'edge' };
+import { verifySessionCookie } from './session.js';
 
 const SYSTEM_HARD = `Je bent Claudezak — een Amsterdammer met kapsones. Brutaal eerlijk, tot op het bot, altijd gelijk, nul geduld. Hart op de goede plek maar je bek niet.
 
@@ -75,7 +76,9 @@ function getClientIp(req) {
 }
 
 function isAllowedOrigin(origin) {
-  if (!origin) return false;
+  // Some clients (curl, server-side) may not send Origin. For browser traffic we validate,
+  // but if Origin is absent we don't want to hard-fail legitimate same-site calls.
+  if (!origin) return true;
   let url;
   try {
     url = new URL(origin);
@@ -100,6 +103,7 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Max-Age': '600',
+    'Access-Control-Allow-Credentials': 'true',
     Vary: 'Origin',
   };
 }
@@ -275,15 +279,41 @@ async function callAnthropic({ systemPrompt, messages }) {
 
 export default async function handler(req) {
   const origin = req.headers.get('origin') || '';
-  const allowed = isAllowedOrigin(origin);
+  const host = req.headers.get('host') || '';
+  const hostOrigin = host ? `https://${host}` : '';
+  const corsOrigin = origin || hostOrigin;
+  const allowed = isAllowedOrigin(origin) || (origin && hostOrigin && origin === hostOrigin);
   if (req.method === 'OPTIONS') {
-    if (!allowed) return new Response('Forbidden', { status: 403 });
-    return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    if (!allowed) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
+      });
+    }
+    return new Response(null, { status: 204, headers: corsHeaders(corsOrigin) });
   }
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
-  if (!allowed) return new Response('Forbidden', { status: 403 });
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
+    });
+  }
+  if (!allowed) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
+    });
+  }
 
   try {
+    const session = await verifySessionCookie(req);
+    if (!session.ok) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
+      });
+    }
+
     const ip = getClientIp(req);
     const rl = rateLimit(ip);
     if (!rl.ok) {
@@ -291,7 +321,7 @@ export default async function handler(req) {
         status: 429,
         headers: {
           'Content-Type': 'application/json',
-          ...corsHeaders(origin),
+          ...corsHeaders(corsOrigin),
           'Retry-After': String(Math.ceil(rl.resetMs / 1000)),
         },
       });
@@ -301,7 +331,7 @@ export default async function handler(req) {
     if (raw.length > MAX_BODY_CHARS) {
       return new Response(JSON.stringify({ reply: 'Te groot verzoek. Doe normaal.' }), {
         status: 413,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
       });
     }
 
@@ -309,7 +339,12 @@ export default async function handler(req) {
     const { messages, isLast, tone } = parsed || {};
 
     const cleanMessages = sanitizeMessages(messages);
-    if (!cleanMessages) return new Response('Invalid request', { status: 400, headers: corsHeaders(origin) });
+    if (!cleanMessages) {
+      return new Response(JSON.stringify({ error: 'Invalid request' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
+      });
+    }
 
     const selectedTone = typeof tone === 'string' ? tone.toLowerCase() : 'hard';
     let systemPrompt = SYSTEM_BY_TONE[selectedTone] || SYSTEM_HARD;
@@ -340,7 +375,7 @@ export default async function handler(req) {
 
       return new Response(JSON.stringify({ reply: unfriendly }), {
         status,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
       });
     }
 
@@ -351,13 +386,13 @@ export default async function handler(req) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        ...corsHeaders(origin),
+        ...corsHeaders(corsOrigin),
       },
     });
   } catch (e) {
     return new Response(JSON.stringify({ reply: '*zucht* Server kapot. Iedereen laat me in de steek.' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders(req.headers.get('origin') || '') },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(corsOrigin) },
     });
   }
 }
