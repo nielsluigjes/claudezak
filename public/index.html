@@ -167,15 +167,15 @@
     <div id="cz-avatar">CZ</div>
     <div>
       <div id="cz-name">CLAUDEZAK</div>
-      <div id="cz-tagline">brutally honest. always right. zero patience.</div>
+      <div id="cz-tagline">Recht voor z'n raap. Altijd gelijk. Nul geduld.</div>
     </div>
-    <div id="cz-counter">10 vragen over</div>
+    <div id="cz-counter">4 vragen over</div>
   </div>
 
   <div id="cz-messages">
     <div class="msg bot">
       <div class="msg-avatar">CZ</div>
-      <div class="bubble">Nou, wat wil je weten? En maak het interessant, want ik heb geen zin in flauwekul. / So, what do you want? Make it worth my time.</div>
+      <div class="bubble">Ja, wat moet je?</div>
     </div>
   </div>
 
@@ -185,11 +185,11 @@
   </div>
 
   <div id="cz-input-area">
-    <textarea id="cz-input" placeholder="Vraag maar raak... / Ask away..." rows="1"></textarea>
+    <textarea id="cz-input" placeholder="Nou? Zeg dan.." rows="1"></textarea>
     <button id="cz-send">STUUR</button>
   </div>
   <div id="cz-blocked"></div>
-  <div id="cz-disclaimer">Claudezak zegt wat ie denkt. Gevoelige zielen: wegwezen.</div>
+  <div id="cz-disclaimer">Claudezak zegt wat ie denkt. Gevoelige types opzouten.</div>
 </div>
 
 <script>
@@ -201,23 +201,24 @@
   const inputArea = document.getElementById('cz-input-area');
   const blockedEl = document.getElementById('cz-blocked');
 
-  const MAX = 10;
+  const MAX = 4;
   let count = 0;
   const history = [];
 
   const LIMIT_MSGS = [
-    "Dat was je laatste vraag. Ik ben op. Ga ergens anders je problemen dumpen.",
-    "Klaar. Genoeg. Ik heb mijn burgerplicht vervuld. Vertrek nu.",
-    "Je limiet is bereikt. Ik ook. Tot nooit.",
-    "En dat was hem dan. Ik ga wat nuttigs doen. Jij ook, hopelijk.",
-    "That's your last question. I'm done. Go bother someone else.",
-    "Limit reached. So is my patience. Goodbye forever.",
+    "Dit was je laatste vraag. Loket is dicht. Doei.",
+    "Zo. Klaar. Je beurt is op. Ga fietsen stelen.",
+    "Limiet gehaald. Mijn geduld ook. Wegwezen.",
+    "Zo. Ik vind t welletjes. Je zoek het maar uit verder.",
+    "Laatste vraag. Ik kap ermee. Zoek t ff uit",
+    "Tot hier. Ik ben er klaar mee. Mazzel.",
+    "Ja doei. Opzoute nou.",
   ];
 
   function updateCounter() {
     const left = MAX - count;
     if (left > 1) counterEl.textContent = left + ' vragen over';
-    else if (left === 1) counterEl.textContent = '1 vraag over — maak er wat van';
+    else if (left === 1) counterEl.textContent = 'nog 1 vraag over dus maak er wat van';
     else { counterEl.textContent = 'opgesodemieterd'; counterEl.style.color = '#c0392b'; }
   }
 
@@ -265,7 +266,7 @@
       addMsg('bot', reply);
     } catch (e) {
       typingEl.style.display = 'none';
-      addMsg('bot', '*zucht* Server kapot. Iedereen laat me in de steek.');
+      addMsg('bot', '*zucht* Server kapot. Jouw schuld.');
     }
 
     if (isLast) {
