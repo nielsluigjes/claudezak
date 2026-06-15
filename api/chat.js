@@ -46,8 +46,8 @@ const SYSTEM_BY_TONE = {
 };
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const PRIMARY_MODEL = 'claude-sonnet-4-20250514';
-const FALLBACK_MODEL = process.env.ANTHROPIC_FALLBACK_MODEL || '';
+const PRIMARY_MODEL = 'claude-sonnet-4-6';
+const FALLBACK_MODEL = process.env.ANTHROPIC_FALLBACK_MODEL || 'claude-haiku-4-5-20251001';
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504, 529]);
 const MAX_RETRIES = 3;
 const MAX_OVERLOAD_RETRIES = 6;
